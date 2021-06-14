@@ -1,0 +1,393 @@
+### A Pluto.jl notebook ###
+# v0.14.7
+
+using Markdown
+using InteractiveUtils
+
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    quote
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : missing
+        el
+    end
+end
+
+# ╔═╡ 90b0c22a-657a-11eb-0d17-9b2f74d9c14b
+using Plots, LinearAlgebra
+
+# ╔═╡ 4baa21f4-67c4-11eb-3ec2-878ddfb8b050
+@bind beta html"<input type=range min=30 max=150.0 step= 5>"
+
+# ╔═╡ fe69b020-8b21-11eb-3539-dfe4126c4f1e
+beta
+
+# ╔═╡ 600110c0-67c4-11eb-04b3-d1232c4aba5a
+@bind gamma html"<input type=range min=30 max=150.0 step= 5>"
+
+# ╔═╡ 012c13d4-8b22-11eb-246c-d7b37a00be71
+gamma
+
+# ╔═╡ dd402f44-67c4-11eb-10f6-8537fef934a2
+
+
+# ╔═╡ 6155003e-66f5-11eb-191c-c108456a85f6
+# define Bloch sphere
+function bloch()
+	N=100
+	a=0.150
+	b=100
+	lw=0.4
+	lw1 = 5
+	theta=LinRange(0.0,2*pi,N)
+	phi=LinRange(0.0,2*pi,N)
+	z0=0.0
+	r = 1.0
+	plot3d(r*sin.(theta).*cos.(0.0),r*sin.(theta).*sin.(0.0),r*cos.(theta),legend=false,line = (:black, lw, abs.(a.-sin.(phi)/b)),size=(1.0*800,1.0*700),axis=([], false),box=:on,camera = (beta, gamma),xlim=(-1.0,1.0), ylim=(-1.0,1.0),zlim=(-1.0,1.0))
+	for n in 2:17
+		long=n*pi/18
+		plot3d!(r*sin.(theta).*cos.(long),r*sin.(theta).*sin.(long),r*cos.(theta),line = (:black, lw, abs.(a.-sin.(phi)/b)))
+	end
+#	plot3d!(sin.(theta),z0*ones(N),cos.(theta),line = (:black, lw, abs.(a.-z0/b)))
+#	plot3d!(z0*ones(N),sin.(theta),cos.(theta),line = (:black, lw, abs.(a.-sin.(theta)/b)))
+	plot3d!(r*sin.(theta),r*cos.(theta),zeros(N),line = (:black, lw, abs.(a.-cos.(theta)/b)))
+	z1= 2*r/3
+	rho1= sqrt(r^2-z1*z1)
+	x1=rho1*sin.(theta)
+	y1=rho1*cos.(theta)
+	plot3d!(x1,y1,z1*ones(N),line = (:black, lw, abs.(a.-cos.(theta)/b)))
+	z2= -2*r/3
+	rho2= sqrt(r^2-z2*z2)
+	x2=rho2*sin.(theta)
+	y2=rho2*cos.(theta)
+	plot3d!(x2,y2,z2*ones(N),line = (:black, lw, abs.(a.-cos.(theta)/b)))
+#   plot3d! unit circle behind
+	alpha = 0
+	x3 = r*cos.(theta)
+	z3 = zeros(N)
+	y3 = r*sin.(theta)
+	#tune the angle of the circle by rotating with the rotation matrix
+	x3 = cos(alpha)*x3 - sin(alpha)*y3
+	y3 = sin(alpha)*x3 + cos(alpha)*y3
+	
+	plot3d!(x3,y3,z3,line = (:blue, lw1, abs.(a.-cos.(theta)/b)))
+end
+
+# ╔═╡ f1568fa5-5166-4a1a-ba18-f0ed8637d8a8
+function PhaseGate(phi1,phi2)
+	T = Diagonal([1.0,exp(1im*phi1),exp(1im*phi2)])
+	T
+end
+
+# ╔═╡ 3ad830a0-8cf7-11eb-050a-15db2961e2ee
+#define circle function
+function circle()
+	N=100
+	a=0.150
+	b=100
+	lw=5
+	lw1=1
+	theta=LinRange(0.0,2*pi,N)
+	phi=LinRange(0.0,2*pi,N)
+	r = 1.0
+	x = r*cos.(theta)
+	y = r*sin.(theta)
+	#plot unit circle
+	plot(x,y,legend=false,line = (:blue, lw, abs.(a.-sin.(phi)/b)),size=(1.0*650,1.0*570),axis=([], false),box=:on,camera = (beta, gamma),xlim=(-1.40,1.40), ylim=(-1.40,1.40))
+	#plot half unit circle
+	r1 = 0.5
+	x1 = r1*cos.(theta)
+	y1 = r1*sin.(theta)
+	plot!(x1,y1,line = (:black, lw1, abs.(a.-cos.(theta)/b)))
+	
+end
+
+# ╔═╡ cf8dec26-66f5-11eb-0da4-1f6980b588b2
+bloch()
+
+# ╔═╡ 0ccdad82-8cf9-11eb-1f08-5326dea67fab
+circle()
+
+# ╔═╡ b319b6be-657a-11eb-0c9a-b7bad8458f33
+#define dissipator operator
+function D(sigma)
+	d = size(sigma)[1]
+	I0 = Matrix(1.0I,d,d)
+	kron(conj(sigma),sigma)-0.5*kron(I0,transpose(conj(sigma))*sigma)-0.5*kron(transpose(transpose(conj(sigma))*sigma),I0)
+end
+
+# ╔═╡ 5b0217b4-6606-11eb-36ff-11ab6f2cfc8e
+@bind Delta html"<input type=range min=0.01 max=100.0 step=0.05>"
+
+# ╔═╡ 47192f3c-6f4a-4c67-b80b-3fb5429d6ef4
+Delta
+
+# ╔═╡ 5c191eb8-6606-11eb-135a-2dfc9770d760
+@bind delta html"<input type=range min=0.01 max=20.0 step=0.05>"
+
+# ╔═╡ b8362863-07cb-4bc9-b182-1f2896f6f471
+delta
+
+# ╔═╡ 60454810-6606-11eb-21bb-2f8c73d64945
+@bind Omega1 html"<input type=range min=0.01 max=20.0 step=0.05>"
+
+# ╔═╡ 813469b8-8709-4346-93cd-570e3269e5b9
+Omega1
+
+# ╔═╡ 67bbd7b0-6606-11eb-3acf-37b5b5ef67e3
+@bind Omega2 html"<input type=range min=0.01 max=20.0 step=0.05>"
+
+# ╔═╡ f85ba676-8b20-45f9-9041-e45305787993
+Omega2
+
+# ╔═╡ 6cb9a9e0-6606-11eb-12c5-131eb60d99db
+@bind Gamma1 html"<input type=range min=0.00 max=3.0 step=0.05>"
+
+# ╔═╡ 7b5d7acc-213a-4b3e-940b-a33fb3591f09
+Gamma1
+
+# ╔═╡ 70a3907a-6606-11eb-0876-7719516e21bc
+#@bind Gamma2 html"<input type=range min=0.01 max=3.0 step=0.05>"
+
+# ╔═╡ 746f3452-6606-11eb-0a1a-c52783cd8304
+@bind tt html"<input type=range min=0.01 max=5.0 step=0.05>"
+
+# ╔═╡ c3abcba2-700e-4e06-8ef9-a28cb49a6fe7
+tt
+
+# ╔═╡ cfdf7848-5715-462a-bc28-8935dae2aa89
+(Omega2^2 - Omega1^2)/(4*Delta)
+
+# ╔═╡ c76438d6-20da-411e-9acb-6c935c014880
+(pi)/(abs(Omega1)*abs(Omega2)/(2*Delta))
+
+# ╔═╡ 472d69c5-c788-4108-97a4-51caedcbe86e
+pi/Omega1
+
+# ╔═╡ ab1c8fac-2b1a-4aaf-a3ec-f8c1b5192b2b
+aa = 1:9
+
+# ╔═╡ 91047040-8ccb-4427-a455-dd0f9b2f797f
+reshape(aa,3,3)
+
+# ╔═╡ 4b1a4823-6b5a-4152-bc6f-9563c094816f
+### Simple case with applying Phasegate
+begin 
+	#initial state 
+	psi1 = [1.0;0.0;0.0]
+	psi2 = [0.0;1.0;0.0]
+	psi3 = [0.0;0.0;1.0]
+	psi12 = (1/sqrt(2))*[1.0;1.0;0.0]
+	psi13 = (1/sqrt(2))*[1.0;0.0;1.0]
+	#psi23 = [0.0;1/sqrt(3);sqrt(2)/sqrt(3)]
+	psi23 = (1/sqrt(2))*[0.0;1.0;1.0]
+	psi123 = (1/sqrt(3))*[1.0;1.0;1.0]
+	
+	sigmaxx = Complex[0 1 0;1 0 0;0 0 0]
+	sigmayy = Complex[0 -1im 0;1im 0 0;0 0 0]
+	sigmazz = Complex[1 0 0;0 -1 0;0 0 0]
+	sigma00 = Complex[0 0 0;0 0 0;0 0 1]
+	
+	#define phase variables1
+	nump = 1200
+	phimax1 = 2.0*pi
+	phi1 = LinRange(0.0,phimax1,nump)
+	
+	#define phase variables2
+	phimax2 = 1.95*pi
+	phi2 = LinRange(0.0,phimax2,nump)
+	
+	#quantum state evolution 
+	a = zeros(nump)
+	b = zeros(nump)
+	c = zeros(nump)
+	a1 = zeros(nump)
+	b1 = zeros(nump)
+	c1 = zeros(nump)
+	
+	#Applying PhaseGate
+	for i in 1:nump
+		psiall = PhaseGate(phi1[i],phi2[i])*psi123
+		DM1 = psiall*psiall'
+		a[i] = real(tr(sigmaxx*DM1))
+		b[i] = real(tr(sigmayy*DM1))
+		c[i] = real(tr(sigmazz*DM1))
+		###
+		r = real(tr(sigma00*DM1))
+		cs1 = abs(psiall[1])==0 ? 1.0 : real(psiall[1])/abs(psiall[1])
+		sn1 = abs(psiall[1])==0 ? 0.0 : imag(psiall[1])/abs(psiall[1])
+		cs3 = abs(psiall[3])==0 ? 1.0 : real(psiall[3])/abs(psiall[3])
+		sn3 = abs(psiall[3])==0 ? 0.0 : imag(psiall[3])/abs(psiall[3])
+		if r==1.0  
+			a1[i] = r*cos(0.5*pi*r)
+			b1[i] = r*cos(0.5*pi*r)
+			c1[i] = r*sin(0.5*pi*r)
+		else
+			a1[i] = r*cos(0.5*pi*r)*(cs3*cs1 + sn3*sn1)
+			b1[i] = r*cos(0.5*pi*r)*(sn3*cs1 - cs3*sn1)
+			c1[i] = r*sin(0.5*pi*r)		
+		end
+	end
+	
+	bloch()
+	scatter3d!(a,b,c,ms=3,zcolor=phi1/phimax1,m =(:heat, 0.25),markerstrokewidth=0)
+	scatter3d!(a1,b1,c1,ms=3,zcolor=phi2/phimax2,m =(:algae, 0.25),markerstrokewidth=0)
+end
+
+# ╔═╡ 48f15936-6606-11eb-2bd9-1d8d733118c1
+### Actual Three-level system case
+begin 
+	
+	#define sigma_plus and sig_minus
+	g1 = [1.0;0.0;0.0]
+	g2 = [0.0;1.0;0.0]
+	e = [0.0;0.0;1.0]
+	sigma1 = g1*e'
+	sigma2 = g2*e'
+	sigmax = Complex[0 1 0;1 0 0;0 0 0]
+	sigmay = Complex[0 -1im 0;1im 0 0;0 0 0]
+	sigmaz = Complex[1 0 0;0 -1 0;0 0 0]
+	sigma0 = Complex[0 0 0;0 0 0;0 0 1]
+	
+	Gamma2 = Gamma1 
+	
+
+	#deifne g plus and g minus state
+	theta = atan(Omega2/Omega1)
+	gp = cos(theta)*g1 + sin(theta)*g2
+	gm = -sin(theta)*g1 + cos(theta)*g2
+	GP = gp*gp'
+	GM = gm*gm'
+	
+	
+	#define Hamiltonian 
+	H_a = 1*Delta*g1*g1' + 1*(Delta-delta)*g2*g2'
+	H_af = 0.5*Omega1*(sigma1 + conj(sigma1')) + 0.5*Omega2*(sigma2 + conj(sigma2'))
+	H = H_a + H_af
+	
+	#define superoperator
+	I3 = Matrix(1.0I,3,3)
+	H_eff = -1im*(kron(I3,H)-kron(conj(H'),I3)) 
+	L_eff = Gamma1*D(sigma1)+Gamma2*D(sigma2)
+	S = H_eff+L_eff #superoperator
+	evals, evecs = eigen(S)
+	
+	#define time parameter
+	num = 1200
+	tmax = tt
+	t = LinRange(0,tmax,num)
+	dt = t[2]-t[1]
+	
+	#define initial state
+	rho_0 = zeros(9)
+	rho_0[1] = 1.0
+	
+	#quantum state evolution 
+	u1 = zeros(num)
+	v1 = zeros(num)
+	w1 = zeros(num)
+	u2 = zeros(num)
+	v2 = zeros(num)
+	w2 = zeros(num)
+
+	
+	rho_ee = zeros(num)
+	rho_gg1 = zeros(num)
+	rho_gg2 = zeros(num)
+	rho_gp = zeros(num)
+	rho_gm = zeros(num)
+	for i in 1:num
+		rho_all = evecs*Diagonal(exp.(evals*t[i]))*inv(evecs)*rho_0
+		rho_ee[i] = real(rho_all[9])
+		rho_gg2[i] = real(rho_all[5])
+		rho_gg1[i] = real(rho_all[1])
+		DM = reshape(rho_all,3,3)
+		rho_gp[i] = real(tr(GP*DM))
+		rho_gm[i] = real(tr(GM*DM))
+		u1[i] = real(tr(sigmax*DM))
+		v1[i] = real(tr(sigmay*DM))
+		w1[i] = real(tr(sigmaz*DM))
+		r2 = real(tr(sigma0*DM))
+		u2[i] = abs(rho_all[3])==0.0 ? 0.0 : r2*cos(0.5*pi*r2)*(real(rho_all[3])/abs(rho_all[3]))
+		v2[i] = abs(rho_all[3])==0.0 ? 0.0 : r2*cos(0.5*pi*r2)*(imag(rho_all[3])/abs(rho_all[3]))
+		w2[i] = abs(rho_all[3])==0.0 ? 0.0 : r2*sin(0.5*pi*r2)	
+	end
+	
+	l = @layout [a;b;c]
+	p1 = plot(t,rho_ee, colour=:green,label="Prob in e state (Numerical)",legend=:topleft)
+	p1 = plot!(t,rho_gg2,colour=:red,label="Prob in g2 state (Numerical)")
+	p1 = plot!(t,rho_gg1,colour=:blue,label="Prob in g1 state (Numerical)")
+	p2 = plot(t,rho_ee,label="Prob in e state",legend=:topleft)
+	p2 = plot!(t,rho_gp,label="Prob in gp state")
+	p2 = plot!(t,rho_gm,label="Prob in gm state")
+	p3 = bloch()
+	p3 = scatter3d!(u1,v1,w1,ms=3,zcolor=t/tmax,m =(:heat, 0.25),markerstrokewidth=0)
+	p3 = scatter3d!(u2,v2,w2,ms=3,zcolor=t/tmax,m =(:algae, 0.25),markerstrokewidth=0)
+	p4 = plot(p1,p2,p3,layout=l,size=(700,1700))
+end
+
+# ╔═╡ afcc11b4-c493-4151-afd6-082fdf992b13
+
+
+# ╔═╡ 368ff44e-3765-464a-81f8-7b25a6ecc363
+a1
+
+# ╔═╡ 2f4216a2-b89c-4453-93ff-1335889aee5a
+ss = PhaseGate(2*pi,2*pi)*psi23
+
+# ╔═╡ 531d8987-49f4-45f0-98b1-498be7db0393
+dm = ss*ss'
+
+# ╔═╡ 8bc6978e-7230-4a70-985e-8cfbb66854be
+real(tr(sigma00*dm))
+
+# ╔═╡ bac5ff4c-0b5b-40e2-ae21-7b9d404d4a80
+log(exp(1im*pi))
+
+# ╔═╡ 924966a3-0a16-4049-9886-d5bf620bc98c
+log(10)
+
+# ╔═╡ b7f5a60e-8d90-4dff-aaef-c09abf72c0f9
+1.9*pi
+
+# ╔═╡ Cell order:
+# ╠═90b0c22a-657a-11eb-0d17-9b2f74d9c14b
+# ╠═4baa21f4-67c4-11eb-3ec2-878ddfb8b050
+# ╠═fe69b020-8b21-11eb-3539-dfe4126c4f1e
+# ╠═600110c0-67c4-11eb-04b3-d1232c4aba5a
+# ╠═012c13d4-8b22-11eb-246c-d7b37a00be71
+# ╟─dd402f44-67c4-11eb-10f6-8537fef934a2
+# ╠═6155003e-66f5-11eb-191c-c108456a85f6
+# ╠═f1568fa5-5166-4a1a-ba18-f0ed8637d8a8
+# ╠═3ad830a0-8cf7-11eb-050a-15db2961e2ee
+# ╠═cf8dec26-66f5-11eb-0da4-1f6980b588b2
+# ╠═0ccdad82-8cf9-11eb-1f08-5326dea67fab
+# ╠═b319b6be-657a-11eb-0c9a-b7bad8458f33
+# ╠═5b0217b4-6606-11eb-36ff-11ab6f2cfc8e
+# ╠═47192f3c-6f4a-4c67-b80b-3fb5429d6ef4
+# ╠═5c191eb8-6606-11eb-135a-2dfc9770d760
+# ╠═b8362863-07cb-4bc9-b182-1f2896f6f471
+# ╠═60454810-6606-11eb-21bb-2f8c73d64945
+# ╠═813469b8-8709-4346-93cd-570e3269e5b9
+# ╠═67bbd7b0-6606-11eb-3acf-37b5b5ef67e3
+# ╠═f85ba676-8b20-45f9-9041-e45305787993
+# ╠═6cb9a9e0-6606-11eb-12c5-131eb60d99db
+# ╠═7b5d7acc-213a-4b3e-940b-a33fb3591f09
+# ╠═70a3907a-6606-11eb-0876-7719516e21bc
+# ╠═746f3452-6606-11eb-0a1a-c52783cd8304
+# ╠═c3abcba2-700e-4e06-8ef9-a28cb49a6fe7
+# ╠═cfdf7848-5715-462a-bc28-8935dae2aa89
+# ╠═c76438d6-20da-411e-9acb-6c935c014880
+# ╠═472d69c5-c788-4108-97a4-51caedcbe86e
+# ╠═48f15936-6606-11eb-2bd9-1d8d733118c1
+# ╠═ab1c8fac-2b1a-4aaf-a3ec-f8c1b5192b2b
+# ╠═91047040-8ccb-4427-a455-dd0f9b2f797f
+# ╠═4b1a4823-6b5a-4152-bc6f-9563c094816f
+# ╠═afcc11b4-c493-4151-afd6-082fdf992b13
+# ╠═368ff44e-3765-464a-81f8-7b25a6ecc363
+# ╠═2f4216a2-b89c-4453-93ff-1335889aee5a
+# ╠═531d8987-49f4-45f0-98b1-498be7db0393
+# ╠═8bc6978e-7230-4a70-985e-8cfbb66854be
+# ╠═bac5ff4c-0b5b-40e2-ae21-7b9d404d4a80
+# ╠═924966a3-0a16-4049-9886-d5bf620bc98c
+# ╠═b7f5a60e-8d90-4dff-aaef-c09abf72c0f9
