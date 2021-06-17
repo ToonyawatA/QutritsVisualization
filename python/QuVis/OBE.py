@@ -52,28 +52,10 @@ class OpticalBlochEquation:
         self.numd = 1000
 
     def Initialise(self):
-        pg1 = np.real(self.init_state[0,0])
-        pg2 = np.real(self.init_state[4,0])
-        pe = np.real(self.init_state[8,0])
-        #density matrix
-        DM = self.init_state.reshape(3,3)
-        #bloch1
-        u1 = np.real(np.trace(self.sigmax*DM))
-        v1 = np.real(np.trace(self.sigmay*DM))
-        w1 = np.real(np.trace(self.sigmaz*DM))
-        #bloch2
-        r2 = np.real(np.trace(self.sigma0*DM))
-        if(r2==1):
-            u2 = r2*np.cos(0.5*pi*r2)
-            v2 = r2*np.cos(0.5*pi*r2)
-            w2 = r2*np.sin(0.5*pi*r2)
-        else:
-            u2 = r2*np.cos(0.5*pi*r2)*(np.real(self.init_state[2,0])/np.abs(self.init_state[2,0])) if np.abs(self.init_state[2,0])!=0 else 0
-            v2 = r2*np.cos(0.5*pi*r2)*(np.imag(self.init_state[2,0])/np.abs(self.init_state[2,0])) if np.abs(self.init_state[2,0])!=0 else 0
-            w2 = r2*np.sin(0.5*pi*r2) if np.abs(self.init_state[2,0])!=0 else 0
-        self.probability = np.array([pg1,pg2,pe])
-        self.bloch1 = np.array([u1,v1,w1])
-        self.bloch2 = np.array([u2,v2,w2])
+        #define bloch vector and probability array
+        self.bloch1 = np.zeros(3)
+        self.bloch2 = np.zeros(3)
+        self.probability = np.zeros(3)
 
     def saveTrajectory(self):
         #state probability
@@ -125,32 +107,148 @@ class OpticalBlochEquation:
     def Trajectory(self):
         #define time array
         self.Initialise()
-        for i in range(self.numt-1):
-            self.getNextState()
+        for i in range(self.numt):
             self.saveTrajectory()
+            self.getNextState()
         self.bloch1 = self.radius*self.bloch1
         self.bloch2 = self.radius*self.bloch2
+        self.bloch1 = np.delete(self.bloch1,0,0)
+        self.bloch2 = np.delete(self.bloch2,0,0)
+        self.probability = np.delete(self.probability,0,0)
 
-    def makePlot(self,arr,population=False,susceptibily=False,rabi=False):
-        row, column = np.shape(arr)
+    def makePlot(self,population=False,susceptibility=False,rabi=False):
         poplabel = [r'$|g_1\rangle$',r'$|g_2\rangle$',r'$|e\rangle$']
-        plt.figure()
+        rabilabel = ['Pulse1','Pulse2']
+        chilabel = ['Dispersion','Absorption']
         if(population):
-            for i in range(column):
-                plt.plot(self.time,arr[:,i],label=poplabel[i])
+            plt.figure()
+            for i in range(3):
+                plt.plot(self.time,self.probability[:,i],label=poplabel[i])
             plt.xlabel(r'Time ($t$)')
             plt.ylabel(r'Population')
             plt.legend()
-        elif(susceptibily):
-            for i in range(column):
-                plt.plot(self.time,arr[:,i],label=poplabel[i])
+        if(susceptibility):
+            plt.figure()
+            plt.plot(self.detuning,self.rhoba_r,label='Dispersion')
+            plt.plot(self.detuning,self.rhoba_i,label='Absorption')
             plt.xlabel(r'Detuning ($\Delta$)')
-            plt.ylabel(r'Susceptibility ($\chi$)')
+            plt.ylabel(r'Susceptibility')
             plt.legend()
-        elif(rabi):
-            for i in range(column):
-                plt.plot(self.time,arr[:,i],label=poplabel[i])
+        if(rabi):
+            plt.figure()
+            plt.plot(self.time,self.omega1,label='Pulse1')
+            plt.plot(self.time,self.omega2,label='Pulse2')
             plt.xlabel(r'Time ($t$)')
             plt.ylabel(r'Rabi Frequency')
             plt.legend()
         plt.show()
+
+    def makePyvista(self):
+        #set colour
+        dr=[190.0/255.0,30.0/255.0,45.0/255.0]
+        dy=[255.0/255.0,213.0/255.0,58.0/255.0]
+        dg=[175.0/255.0,169.0/255.0,97.0/255.0] # Durham green
+        db=[0,174.0/255.0,239.0/255.0]
+        dp=[104.0/255.0,36.0/255.0,109.0/255.0]
+        di=[0.0/255.0,42.0/255.0,65.0/255.0] # Durham ink
+        dpi=[203.0/255.0,168.0/255.0,177.0/255.0] #  Durham pink
+        ds=[218.0/255.0,205.0/255.0,162.0/255.0] # Durham stone
+        dsk=[165.0/255.0,200.0/255.0,208.0/255.0] # Durham sky
+        ### Generate Bloch sphere by using pv.Spline for Stimulate Raman Transition with decay process
+        num=50
+        theta = np.linspace(-1 * np.pi, 1 * np.pi, num)
+        r=3.0
+        phi=0*np.pi/60
+        ###xy axis
+        z = 0*r * np.cos(theta)
+        x = r * np.cos(theta)
+        y = r * np.sin(theta)
+        rpts=np.column_stack((x, y, z))
+        spline = pv.Spline(rpts, 1000)
+        rxy_tube=spline.tube(radius=0.05)
+        ###xz axis
+        z = r * np.cos(theta)
+        x = r * np.sin(theta)*np.cos(phi-np.pi/2)
+        y = r * np.sin(theta)*np.sin(phi-np.pi/2)
+        rpts=np.column_stack((x, y, z))
+        spline = pv.Spline(rpts, 1000)
+        rxz_tube=spline.tube(radius=0.05)
+        ###yz axis
+        z = r * np.cos(theta)
+        x = r * np.sin(theta)*np.cos(phi)
+        y = r * np.sin(theta)*np.sin(phi)
+        rpts=np.column_stack((x, y, z))
+        spline = pv.Spline(rpts, 1000)
+        ryz_tube=spline.tube(radius=0.05)
+        ### Plot spline on Bloch sphere
+        small=pv.Sphere(center=(0, 0, r), radius=0.2)
+        big=pv.Sphere(center=(0, 0, 0), radius=r)
+        sargs = dict(height=0.25, vertical=True, position_x=0.05, position_y=0.05)
+        res=3
+        ###Generate time for multi plots
+        numt = 1000
+        nx=4
+        ny=3
+        tt = np.linspace(0,numt,nx*ny+1)
+        ### Spline plots
+        #Get trajectory
+        traj1 = self.bloch1
+        traj2 = self.bloch2
+        #begin pyvista plot
+        p = pv.Plotter(shape=(ny,nx), multi_samples=1, window_size=(res*900,res*600))
+        p.set_background(dsk, top="white")
+        '''UFO = pv.Light(position=(10, 10, 10), focal_point=(0, 0, 0), color='white')
+        UFO.positional = True
+        UFO.cone_angle = 40
+        UFO.exponent = 1
+        UFO.intensity = 0.5
+        UFO.show_actor()
+        p.add_light(UFO)
+        '''
+        k=1
+        for i in range(0,ny):
+            for j in range(0,nx):
+                p.subplot(i,j)
+                #p.add_mesh(small, opacity=1.0, color=dr, smooth_shading=True)
+                p.add_mesh(big, opacity=0.4, color="w", specular=0.85, smooth_shading=True)
+                #p.add_mesh(tube,smooth_shading=True,color=dpi)
+                #p.add_mesh(tube,smooth_shading=True,scalar_bar_args=sargs)
+                label=ascii_lowercase[(4*i+j)]
+                #p.add_text('$\\vert \\psi\\rangle$',[180.0*res,165.0*res],color=di,font_size=res*14)
+                p.add_text(label,[10.0*res,165.0*res],color=di,font_size=res*14)
+                p.add_mesh(rxy_tube,opacity=0.1,smooth_shading=True,color=di)
+                p.add_mesh(rxz_tube,opacity=0.1,smooth_shading=True,color=di)
+                p.add_mesh(ryz_tube,opacity=0.1,smooth_shading=True,color=di)
+                # Spline1 for vector1
+                points1 = traj1[0:int(tt[k]),:]
+                spline1 = pv.Spline(points1, 1000)
+                spline1["scalars"] = np.arange(spline1.n_points)
+                tubes1=spline1.tube(radius=0.1)
+                #Sline2 for vector2
+                points2 = traj2[0:int(tt[k]),:]
+                spline2 = pv.Spline(points2, 1000)
+                spline2["scalars"] = np.arange(spline2.n_points)
+                tubes2=spline2.tube(radius=0.1)
+                #
+                p.add_mesh(tubes1,color=dr,smooth_shading=True,show_scalar_bar=False)
+                ept1=pv.Sphere(center=(points1[-1,:]), radius=0.2)
+                p.add_mesh(ept1, opacity=1.0, color=dr, smooth_shading=True)
+                arrow=pv.Arrow(start=(0.0, 0.0, 0.0), direction=(points1[-1,:]), tip_length=0.25, tip_radius=0.1, tip_resolution=20, shaft_radius=0.05, shaft_resolution=20, scale=np.sqrt(sum(points1[-1,:]**2)))
+                p.add_mesh(arrow, opacity=1.0, color=db, smooth_shading=True)
+                #
+                p.add_mesh(tubes2,color=dy,smooth_shading=True,show_scalar_bar=False)
+                ept2=pv.Sphere(center=(points2[-1,:]), radius=0.2)
+                p.add_mesh(ept2, opacity=0.5, color=dy, smooth_shading=True)
+                arrow=pv.Arrow(start=(0.0, 0.0, 0.0), direction=(points2[-1,:]), tip_length=0.25, tip_radius=0.1, tip_resolution=20, shaft_radius=0.05, shaft_resolution=20, scale=np.sqrt(sum(points2[-1,:]**2)))
+                p.add_mesh(arrow, opacity=0.5, color=db, smooth_shading=True)
+
+                k += 1
+        #print(points[-1,:])
+        p.enable_depth_peeling(10)
+        p.link_views()
+        p.camera_position = [(-8.5, 8.5, 3.0),
+                             (0.0, 0.0, 0.0),
+                             (0.0, 0.0, 0.1)]
+        #p.camera_position = [(12.0, 0.0, 1.0),(0.0, 0.0, 0.0),(0.1, 0.0, 0.1)]
+        #p.show(screenshot='StimRa_HighdeltaGamma.png')
+        p.show()
