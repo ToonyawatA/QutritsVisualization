@@ -39,7 +39,7 @@ psi0[0] = 1.0
 
 
 #initiate project3 EIT
-project3 = EIT(Omega1=0.2,Omega2=0.5,Gamma1=1.0,Gamma2=0.5,delta=0.0,Delta=0.0,tmax=40.0,init_state=psi0,DeltaRange=5.0)
+project3 = EIT(Omega1=0.2,Omega2=0.5,Gamma1=1.0,Gamma2=0.5,delta=1.0,Delta=1.0,tmax=30.0,init_state=psi0,DeltaRange=5.0)
 
 #Calculating it's trajectory
 project3.Trajectory()

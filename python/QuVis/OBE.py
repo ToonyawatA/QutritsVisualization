@@ -48,8 +48,9 @@ class OpticalBlochEquation:
         self.numt = 1000
         self.time = np.linspace(0,self.tmax,self.numt)
         self.dt = self.time[1]-self.time[0]
-        #define detuning step
-        self.numd = 1000
+
+    def DensityMatrix(self):
+        return self.state.reshape(3,3)
 
     def Initialise(self):
         #define bloch vector and probability array
