@@ -10,17 +10,11 @@ import matplotlib.colors as mcolors
 matplotlib.rcParams['text.usetex'] = True
 from string import ascii_lowercase
 
-def Dissipator(sigma):
-    d = np.shape(sigma)[0]
-    sigma = np.mat(sigma)
-    I = np.eye(d)
-    I = np.mat(I)
-    return np.mat(kron(np.conj(sigma),sigma) - 0.5*kron(I,np.conj(sigma.T)*sigma) - 0.5*kron((np.conj(sigma.T)*sigma).T,I))
+def Expt(psi,Op):
+    return np.conj(psi.T).dot(Op.dot(psi))
 
-
-class OpticalBlochEquation:
-    ### init ###
-    def __init__(self,Omega1,Omega2,Delta,delta,Gamma1,Gamma2,tmax,init_state):
+class MCWF:
+    def __init__(self,Omega1,Omega2,Delta,delta,Gamma1,Gamma2,tmax,init_state,Nsamples):
         self.Omega1 = Omega1
         self.Omega2 = Omega2
         self.Delta = Delta
@@ -28,121 +22,141 @@ class OpticalBlochEquation:
         self.Gamma1 = Gamma1
         self.Gamma2 = Gamma2
         self.tmax = tmax
-        self.init_state = np.mat(init_state.reshape(9,1)) #matrix array
-        #define radius
+        self.init_state = init_state #array type
+        self.Nsamples = Nsamples
+        self.I3 = np.eye(3)
         self.radius = 3.0
-        #define quantum state
-        self.g1 = np.mat(np.array([1,0,0]))
-        self.g2 = np.mat(np.array([0,1,0]))
-        self.e = np.mat(np.array([0,0,1]))
-        #define matrices
-        self.sigma1 = self.g1.T*self.e
-        self.sigma2 = self.g2.T*self.e
-        self.sigmax = np.mat(np.array([[0,1,0],[1,0,0],[0,0,0]]))
-        self.sigmay = np.mat(np.array([[0,-1j,0],[1j,0,0],[0,0,0]]))
-        self.sigmaz = np.mat(np.array([[1,0,0],[0,-1,0],[0,0,0]]))
-        self.sigma0 = np.mat(np.array([[0,0,0],[0,0,0],[0,0,1]]))
-        self.I3 = np.mat(np.eye(3))
-        #define time step and
+        #define time parameter
         self.numt = 1000
         self.time = np.linspace(0,self.tmax,self.numt)
         self.dt = self.time[1]-self.time[0]
+        #define quantum state and sigma matrice (array tyoe)
+        self.g1 = np.array([1,0,0])
+        self.g2 = np.array([0,1,0])
+        self.e = np.array([0,0,1])
+        self.sigma1 = np.outer(self.g1,np.conj(self.e.T))
+        self.sigma2 = np.outer(self.g2,np.conj(self.e.T))
+        self.sigmax = np.array([[0,1,0],[1,0,0],[0,0,0]])
+        self.sigmay = np.array([[0,-1j,0],[1j,0,0],[0,0,0]])
+        self.sigmaz = np.array([[1,0,0],[0,-1,0],[0,0,0]])
+        self.sigma0 = np.array([[0,0,0],[0,0,0],[0,0,1]])
+        #define Hamiltonian and effective non Hermitian Hamiltonain (array type)
+        self.H =  self.Delta*np.outer(self.g1,np.conj(self.g1.T)) + (self.Delta-self.delta)*np.outer(self.g2,np.conj(self.g2.T)) + 0.5*self.Omega1*(self.sigma1 + np.conj(self.sigma1.T)) + 0.5*self.Omega2*(self.sigma2 + np.conj(self.sigma2.T))
+        #define JUMP operators, effective non-Hermitian Hamiltonain and no jump operator (array(type))
+        self.C1 = np.sqrt(self.Gamma1)*self.sigma1
+        self.C2 = np.sqrt(self.Gamma2)*self.sigma2
+        self.nH_eff = self.H - (0.5j)*(np.conj(self.C1.T).dot(self.C1) + np.conj(self.C2.T).dot(self.C2))
+        self.C0 = self.I3 - (1j*self.nH_eff*self.dt)
+        #define state
+        self.state = np.zeros((self.Nsamples,3))
+        self.densitymatrixAvr = np.zeros((self.numt,3,3))
 
-    def DensityMatrix(self):
-        return self.state.reshape(3,3)
 
     def Initialise(self):
-        #define bloch vector and probability array
-        self.state = self.init_state #matrix array
-        self.bloch1 = np.zeros(3)
-        self.bloch2 = np.zeros(3)
-        self.probability = np.zeros(3)
+        self.state[:,:] = self.init_state
+        self.bloch1 = np.zeros(3)  # Calculated from average density matrix
+        self.bloch2 = np.zeros(3)  # Calculated from average density matrix
+        self.prob_e = np.zeros((self.Nsamples,self.numt))
+        self.prob_g1 = np.zeros((self.Nsamples,self.numt))
+        self.prob_g2 = np.zeros((self.Nsamples,self.numt))
+        self.prob_eAvr = np.zeros(self.numt)
+        self.prob_g1Avr = np.zeros(self.numt)
+        self.prob_g2Avr = np.zeros(self.numt)
 
-    def saveTrajectory(self):
-        #state probability
-        pg1 = np.real(self.state[0,0])
-        pg2 = np.real(self.state[4,0])
-        pe = np.real(self.state[8,0])
-        #density matrix
-        DM = self.state.reshape(3,3)
-        #bloch1
-        u1 = np.real(np.trace(self.sigmax*DM))
-        v1 = np.real(np.trace(self.sigmay*DM))
-        w1 = np.real(np.trace(self.sigmaz*DM))
-        #bloch2
-        r2 = np.real(np.trace(self.sigma0*DM))
-        if(r2==1):
-            u2 = r2*np.cos(0.5*pi*r2)
-            v2 = r2*np.cos(0.5*pi*r2)
-            w2 = r2*np.sin(0.5*pi*r2)
+    def dp1(self,j):
+        OpC1 = np.conj(self.C1.T).dot(self.C1)
+        return np.real(self.dt*Expt(self.state[j,:],OpC1))
+
+    def dp2(self,j):
+        OpC2 = np.conj(self.C2.T).dot(self.C2)
+        return np.real(self.dt*Expt(self.state[j,:],OpC2))
+
+    def getNextState(self,j,g1=False,g2=False):
+        dp = np.real(self.dp1(j) + self.dp2(j))
+        if(g1):
+            self.state[j,:] = np.sqrt(self.dt/self.dp1(j))*self.C1.dot(self.state[j,:])
+        elif(g2):
+            self.state[j,:] = np.sqrt(self.dt/self.dp2(j))*self.C2.dot(self.state[j,:])
         else:
-            u2 = r2*np.cos(0.5*pi*r2)*(np.real(self.state[2,0])/np.abs(self.state[2,0])) if np.abs(self.state[2,0])!=0 else 0
-            v2 = r2*np.cos(0.5*pi*r2)*(np.imag(self.state[2,0])/np.abs(self.state[2,0])) if np.abs(self.state[2,0])!=0 else 0
-            w2 = r2*np.sin(0.5*pi*r2) if np.abs(self.state[2,0])!=0 else 0
-        parray = np.array([pg1,pg2,pe])
-        b1array = np.array([u1,v1,w1])
-        b2array = np.array([u2,v2,w2])
-        self.probability = np.vstack((self.probability,parray))
-        self.bloch1 = np.vstack((self.bloch1,b1array))
-        self.bloch2 = np.vstack((self.bloch2,b2array))
+            self.state[j,:] = (1/np.sqrt(1-dp))*self.C0.dot(self.state[j,:])
 
-    def LBsuperoperator(self):
-        H_a = self.Delta*self.g1.T*self.g1 + (self.Delta-self.delta)*self.g2.T*self.g2
-        H_af = 0.5*self.Omega1*(self.sigma1 + np.conj(self.sigma1.T)) + 0.5*self.Omega2*(self.sigma2 + np.conj(self.sigma2.T))
-        H = H_a + H_af
-        #define superoperator
-        H_eff = -1j*np.mat(kron(self.I3,H) - kron(np.conj(H.T),self.I3))
-        L_eff = self.Gamma1*Dissipator(self.sigma1) + self.Gamma2*Dissipator(self.sigma2)
-        S = H_eff+L_eff
-        return S
+    def saveTrajectory(self,i,j):
+        pg1 = self.state[j,:][0]
+        pg2 = self.state[j,:][1]
+        pe = self.state[j,:][2]
+        self.prob_g1[j,i] = np.real(pg1**2)
+        self.prob_g2[j,i] = np.real(pg2**2)
+        self.prob_e[j,i] = np.real(pe**2)
+        self.densitymatrixAvr[i,:,:] += (1/self.Nsamples)*np.outer(self.state[j,:],np.conj(self.state[j,:].T))
 
-    def LBDiagonalise(self):
-        #define Hamiltonian
-        evals, evecs = eig(self.LBsuperoperator())
-        evecs = np.mat(evecs)
-        return evals, evecs
-
-    def getNextState(self):
-        self.state = self.LBDiagonalise()[1]*np.mat(np.diag(np.exp(self.LBDiagonalise()[0]*self.dt)))*np.linalg.inv(self.LBDiagonalise()[1])*self.state
 
     def Trajectory(self):
-        #define time array
         self.Initialise()
         for i in range(self.numt):
-            self.saveTrajectory()
-            self.getNextState()
+            for j in range(self.Nsamples):
+                dp = self.dp1(j) + self.dp2(j)
+                if(np.random.rand()>dp): # no jump
+                    self.saveTrajectory(i,j)
+                    self.getNextState(j)
+                else:
+                    if(np.random.rand()<(self.dp1(j)/dp)): #jump to g1
+                        self.saveTrajectory(i,j)
+                        self.getNextState(j,g1=True)
+                    else: #jump to g2
+                        self.saveTrajectory(i,j)
+                        self.getNextState(j,g2=True)
+
+            #calculating BLoch vector
+            DM = self.densitymatrixAvr[i,:,:]
+            u1 = np.real(np.trace(self.sigmax*DM))
+            v1 = np.real(np.trace(self.sigmay*DM))
+            w1 = np.real(np.trace(self.sigmaz*DM))
+            #bloch2
+            r2 = np.real(np.trace(self.sigma0*DM))
+            if(r2==1):
+                u2 = r2*np.cos(0.5*pi*r2)
+                v2 = r2*np.cos(0.5*pi*r2)
+                w2 = r2*np.sin(0.5*pi*r2)
+            else:
+                u2 = r2*np.cos(0.5*pi*r2)*(np.real(DM[0,2])/np.abs(DM[0,2])) if np.abs(DM[0,2])!=0 else 0
+                v2 = r2*np.cos(0.5*pi*r2)*(np.imag(DM[0,2])/np.abs(DM[0,2])) if np.abs(DM[0,2])!=0 else 0
+                w2 = r2*np.sin(0.5*pi*r2) if np.abs(DM[0,2])!=0 else 0
+            #update vector
+            b1array = np.array([u1,v1,w1])
+            b2array = np.array([u2,v2,w2])
+            self.bloch1 = np.vstack((self.bloch1,b1array))
+            self.bloch2 = np.vstack((self.bloch2,b2array))
+
+            #averaging probability over samples
+            self.prob_eAvr[i] = np.real((1/self.Nsamples)*DM[2,2])
+            self.prob_g1Avr[i] = np.real((1/self.Nsamples)*DM[0,0])
+            self.prob_g2Avr[i] = np.real((1/self.Nsamples)*DM[1,1])
+
         self.bloch1 = self.radius*self.bloch1
         self.bloch2 = self.radius*self.bloch2
         self.bloch1 = np.delete(self.bloch1,0,0)
         self.bloch2 = np.delete(self.bloch2,0,0)
-        self.probability = np.delete(self.probability,0,0)
 
-    def makePlot(self,population=False,susceptibility=False,rabi=False):
-        poplabel = [r'$|g_1\rangle$',r'$|g_2\rangle$',r'$|e\rangle$']
-        rabilabel = ['Pulse1','Pulse2']
-        chilabel = ['Dispersion','Absorption']
-        if(population):
-            plt.figure()
-            for i in range(3):
-                plt.plot(self.time,self.probability[:,i],label=poplabel[i])
-            plt.xlabel(r'Time ($t$)')
-            plt.ylabel(r'Population')
-            plt.legend()
-        if(susceptibility):
-            plt.figure()
-            plt.plot(self.detuning,self.rhoba_r,label='Dispersion')
-            plt.plot(self.detuning,self.rhoba_i,label='Absorption')
-            plt.xlabel(r'Detuning ($\Delta$)')
-            plt.ylabel(r'Susceptibility')
-            plt.legend()
-        if(rabi):
-            plt.figure()
-            plt.plot(self.time,self.omega1,label='Pulse1')
-            plt.plot(self.time,self.omega2,label='Pulse2')
-            plt.xlabel(r'Time ($t$)')
-            plt.ylabel(r'Rabi Frequency')
-            plt.legend()
+    def makePlot(self):
+        fig,ax = plt.subplots(3,1)
+        #plotting e prob
+        for i in range(self.Nsamples):
+            ax[0].plot(self.time,self.prob_e[i,:],c='m')
+            if(i == self.Nsamples-1): ax[0].plot(self.time,self.prob_e[i,:],c='m',label='MCWF')
+        ax[0].plot(self.time,self.prob_eAvr,c='b',label=r'Averaged probability in $|e\rangle$')
+        #plotting g1 prob
+        for i in range(self.Nsamples):
+            ax[1].plot(self.time,self.prob_g1[i,:],c='m')
+            if(i == self.Nsamples-1): ax[1].plot(self.time,self.prob_g1[i,:],c='m',label='MCWF')
+        ax[1].plot(self.time,self.prob_g1Avr,c='b',label=r'Averaged probability in $|g_1\rangle$')
+        #plotting g2 prob
+        for i in range(self.Nsamples):
+            ax[2].plot(self.time,self.prob_g2[i,:],c='m')
+            if(i == self.Nsamples-1): ax[2].plot(self.time,self.prob_g2[i,:],c='m',label='MCWF')
+        ax[2].plot(self.time,self.prob_g2Avr,c='b',label=r'Averaged probability in $|g_2\rangle$')
+        plt.legend()
         plt.show()
+
 
     def makePyvista(self):
         #set colour

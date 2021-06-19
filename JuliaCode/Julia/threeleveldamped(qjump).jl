@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.14.1
+# v0.14.8
 
 using Markdown
 using InteractiveUtils
@@ -147,10 +147,10 @@ begin
 
 	#define jump operator
 	c1 = sqrt(Gamma1)*sigma1
-	C1 = conj(c1')*c1
+	C1 = c1'*c1
 
 	c2 = sqrt(Gamma2)*sigma2
-	C2 = conj(c2')*c2
+	C2 = c2'*c2
 
 	#define effective non-Hermitain Hamiltonian
 	nH_eff = H - (1im/2)*(C1 + C2)
@@ -158,7 +158,7 @@ begin
 
 
 	#define initial state
-	Ns =200
+	Ns =300
 	psi0 = g1
 
 	psi_en = zeros(Complex,3,1,Ns) #ensemble of states
@@ -180,7 +180,7 @@ begin
 
 			#No jump evolution
 			if epsilon[j] > dp[1]
-				norm = real(psi_en[:,:,j]'*nojumpE*psi_en[:,:,j])
+				norm = real(psi_en[:,:,j]'*nojumpE'*nojumpE*psi_en[:,:,j])
 				psi_en[:,:,j] = (1/sqrt(norm[1]))*nojumpE*psi_en[:,:,j]
 				rhoj += psi_en[:,:,j]*conj(psi_en[:,:,j]')
 
