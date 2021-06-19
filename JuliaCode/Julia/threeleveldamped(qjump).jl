@@ -129,7 +129,7 @@ begin
 
 	#define initial state
 	rho_0 = zeros(9)
-	rho_0[1] = 1.0
+	rho_0[9] = 1.0
 
 	#quantum state evolution
 	rho_ee = zeros(num)
@@ -159,7 +159,7 @@ begin
 
 	#define initial state
 	Ns =300
-	psi0 = g1
+	psi0 = e
 
 	psi_en = zeros(Complex,3,1,Ns) #ensemble of states
 	psi_en[:,:,:] .= psi0
@@ -181,6 +181,7 @@ begin
 			#No jump evolution
 			if epsilon[j] > dp[1]
 				norm = real(psi_en[:,:,j]'*nojumpE'*nojumpE*psi_en[:,:,j])
+				#psi_en[:,:,j] = (1/sqrt(1-dp[1]))*nojumpE*psi_en[:,:,j]
 				psi_en[:,:,j] = (1/sqrt(norm[1]))*nojumpE*psi_en[:,:,j]
 				rhoj += psi_en[:,:,j]*conj(psi_en[:,:,j]')
 
@@ -260,6 +261,12 @@ dd = eigve[:,2]*eigve[:,2]'
 # ╔═╡ 7eaeb9d0-6a64-11eb-284e-1d4940a88d01
 conj(eigve')*dd*eigve
 
+# ╔═╡ 6005472c-40f7-41e3-9eb3-91844365050b
+aaa = [1 2 3 4]
+
+# ╔═╡ 5f0a8311-a483-4aad-9e1e-eede4cb8df4b
+aaa'*aaa
+
 # ╔═╡ Cell order:
 # ╠═9814729a-6080-11eb-0de8-bb08c7111606
 # ╠═ee16d9ee-6080-11eb-1564-07708d618050
@@ -293,3 +300,5 @@ conj(eigve')*dd*eigve
 # ╠═2115815c-6a64-11eb-2b95-37c0b7c358ba
 # ╠═4b7846b2-6a64-11eb-1294-b7168ff2f973
 # ╠═7eaeb9d0-6a64-11eb-284e-1d4940a88d01
+# ╠═6005472c-40f7-41e3-9eb3-91844365050b
+# ╠═5f0a8311-a483-4aad-9e1e-eede4cb8df4b

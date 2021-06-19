@@ -11,7 +11,7 @@ matplotlib.rcParams['text.usetex'] = True
 from string import ascii_lowercase
 
 def Expt(psi,Op):
-    return np.conj(psi.T).dot(Op.dot(psi))
+    return np.real(np.conj(psi.T).dot(Op.dot(psi)))
 
 class MCWF:
     def __init__(self,Omega1,Omega2,Delta,delta,Gamma1,Gamma2,tmax,init_state,Nsamples):
@@ -44,9 +44,12 @@ class MCWF:
         self.H =  self.Delta*np.outer(self.g1,np.conj(self.g1.T)) + (self.Delta-self.delta)*np.outer(self.g2,np.conj(self.g2.T)) + 0.5*self.Omega1*(self.sigma1 + np.conj(self.sigma1.T)) + 0.5*self.Omega2*(self.sigma2 + np.conj(self.sigma2.T))
         #define JUMP operators, effective non-Hermitian Hamiltonain and no jump operator (array(type))
         self.C1 = np.sqrt(self.Gamma1)*self.sigma1
+        self.OpC1 = np.conj(self.C1.T).dot(self.C1)
         self.C2 = np.sqrt(self.Gamma2)*self.sigma2
+        self.OpC2 = np.conj(self.C2.T).dot(self.C2)
         self.nH_eff = self.H - (0.5j)*(np.conj(self.C1.T).dot(self.C1) + np.conj(self.C2.T).dot(self.C2))
         self.C0 = self.I3 - (1j*self.nH_eff*self.dt)
+        self.OpC0 = np.conj(self.C0.T).dot(self.C0)
         #define state
         self.state = np.zeros((self.Nsamples,3))
         self.densitymatrixAvr = np.zeros((self.numt,3,3))
@@ -64,30 +67,31 @@ class MCWF:
         self.prob_g2Avr = np.zeros(self.numt)
 
     def dp1(self,j):
-        OpC1 = np.conj(self.C1.T).dot(self.C1)
-        return np.real(self.dt*Expt(self.state[j,:],OpC1))
+        return np.real(self.dt*Expt(self.state[j,:],self.OpC1))
 
     def dp2(self,j):
-        OpC2 = np.conj(self.C2.T).dot(self.C2)
-        return np.real(self.dt*Expt(self.state[j,:],OpC2))
+        return np.real(self.dt*Expt(self.state[j,:],self.OpC2))
+
+    def saveTrajectory(self,i,j):
+        pg1 = self.state[j,:][0]
+        pg2 = self.state[j,:][1]
+        pe = self.state[j,:][2]
+        self.prob_g1[j,i] = np.conj(pg1)*pg1
+        self.prob_g2[j,i] = np.conj(pg2)*pg2
+        self.prob_e[j,i] = np.conj(pe)*pe
+        self.densitymatrixAvr[i,:,:] += (1/self.Nsamples)*np.outer(self.state[j,:],np.conj(self.state[j,:].T))
+
 
     def getNextState(self,j,g1=False,g2=False):
         dp = np.real(self.dp1(j) + self.dp2(j))
+        #norm = np.real(self.dt*Expt(self.state[j,:],self.OpC0))
         if(g1):
             self.state[j,:] = np.sqrt(self.dt/self.dp1(j))*self.C1.dot(self.state[j,:])
         elif(g2):
             self.state[j,:] = np.sqrt(self.dt/self.dp2(j))*self.C2.dot(self.state[j,:])
         else:
             self.state[j,:] = (1/np.sqrt(1-dp))*self.C0.dot(self.state[j,:])
-
-    def saveTrajectory(self,i,j):
-        pg1 = self.state[j,:][0]
-        pg2 = self.state[j,:][1]
-        pe = self.state[j,:][2]
-        self.prob_g1[j,i] = np.real(pg1**2)
-        self.prob_g2[j,i] = np.real(pg2**2)
-        self.prob_e[j,i] = np.real(pe**2)
-        self.densitymatrixAvr[i,:,:] += (1/self.Nsamples)*np.outer(self.state[j,:],np.conj(self.state[j,:].T))
+            #self.state[j,:] = (1/np.sqrt(norm))*self.C0.dot(self.state[j,:])
 
 
     def Trajectory(self):
@@ -128,9 +132,9 @@ class MCWF:
             self.bloch2 = np.vstack((self.bloch2,b2array))
 
             #averaging probability over samples
-            self.prob_eAvr[i] = np.real((1/self.Nsamples)*DM[2,2])
-            self.prob_g1Avr[i] = np.real((1/self.Nsamples)*DM[0,0])
-            self.prob_g2Avr[i] = np.real((1/self.Nsamples)*DM[1,1])
+            self.prob_eAvr[i] = DM[2,2]
+            self.prob_g1Avr[i] = DM[0,0]
+            self.prob_g2Avr[i] = DM[1,1]
 
         self.bloch1 = self.radius*self.bloch1
         self.bloch2 = self.radius*self.bloch2
@@ -138,23 +142,33 @@ class MCWF:
         self.bloch2 = np.delete(self.bloch2,0,0)
 
     def makePlot(self):
-        fig,ax = plt.subplots(3,1)
+        lw1 = 0.8
+        fig,ax = plt.subplots(3,1,figsize=(6,12))
+        fig.suptitle('Monte Carlo Wave-function', fontsize=16)
         #plotting e prob
         for i in range(self.Nsamples):
-            ax[0].plot(self.time,self.prob_e[i,:],c='m')
-            if(i == self.Nsamples-1): ax[0].plot(self.time,self.prob_e[i,:],c='m',label='MCWF')
+            ax[0].plot(self.time,self.prob_e[i,:],c='m',lw=lw1)
+            if(i == self.Nsamples-1): ax[0].plot(self.time,self.prob_e[i,:],c='m',lw=lw1,label='MCWF')
         ax[0].plot(self.time,self.prob_eAvr,c='b',label=r'Averaged probability in $|e\rangle$')
+        ax[0].set_xlabel(r'Time (t)')
+        ax[0].set_ylabel(r'Population')
+        ax[0].legend()
         #plotting g1 prob
         for i in range(self.Nsamples):
-            ax[1].plot(self.time,self.prob_g1[i,:],c='m')
-            if(i == self.Nsamples-1): ax[1].plot(self.time,self.prob_g1[i,:],c='m',label='MCWF')
+            ax[1].plot(self.time,self.prob_g1[i,:],c='m',lw=lw1)
+            if(i == self.Nsamples-1): ax[1].plot(self.time,self.prob_g1[i,:],c='m',lw=lw1,label='MCWF')
         ax[1].plot(self.time,self.prob_g1Avr,c='b',label=r'Averaged probability in $|g_1\rangle$')
+        ax[1].set_xlabel(r'Time (t)')
+        ax[1].set_ylabel(r'Population')
+        ax[1].legend(loc=4)
         #plotting g2 prob
         for i in range(self.Nsamples):
-            ax[2].plot(self.time,self.prob_g2[i,:],c='m')
-            if(i == self.Nsamples-1): ax[2].plot(self.time,self.prob_g2[i,:],c='m',label='MCWF')
+            ax[2].plot(self.time,self.prob_g2[i,:],c='m',lw=lw1)
+            if(i == self.Nsamples-1): ax[2].plot(self.time,self.prob_g2[i,:],c='m',lw=lw1,label='MCWF')
         ax[2].plot(self.time,self.prob_g2Avr,c='b',label=r'Averaged probability in $|g_2\rangle$')
-        plt.legend()
+        ax[2].set_xlabel(r'Time (t)')
+        ax[2].set_ylabel(r'Population')
+        ax[2].legend(loc=4)
         plt.show()
 
 
